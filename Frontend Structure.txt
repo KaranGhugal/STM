@@ -1,0 +1,37 @@
+src/
+├── features/
+│   ├── tasks/
+│   │   ├── components/
+│   │   │   ├── TaskForm.js        # Main task form component
+│   │   │   ├── TaskList.js        # Task list display component
+│   │   │   ├── TaskItem.js        # Individual task item component
+│   │   │   └── TaskStats.js       # Task statistics cards component
+│   │   ├── hooks/
+│   │   │   ├── useTasks.js        # Tasks data and operations hook
+│   │   │   └── useTaskApi.js      # API calls hook
+│   │   ├── services/
+│   │   │   └── taskService.js     # Task-related API service
+│   │   └── Tasks.js               # Main tasks page component
+│   └── auth/
+│       ├── components/
+│       │   ├── LoginForm.js
+│       │   └── RegisterForm.js
+│       ├── hooks/
+│       │   └── useAuth.js
+│       ├── services/
+│       │   └── authService.js
+│       └── context/
+│           └── AuthContext.js
+├── shared/
+│   ├── components/
+│   │   ├── Notification.js        # Notification/Snackbar component
+│   │   └── ProtectedRoute.js      # Auth protected routes
+│   ├── hooks/
+│   │   └── useAxios.js            # Axios instance with interceptors
+│   ├── utils/
+│   │   ├── constants.js           # App constants
+│   │   ├── helpers.js             # Helper functions
+│   │   └── validationSchemas.js   # Form validation schemas
+│   └── styles/
+│       └── theme.js               # MUI theme configuration
+└── App.js                         # Main app component
