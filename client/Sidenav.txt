@@ -1,0 +1,395 @@
+import React from 'react'; // Added missing React import
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Avatar,
+  Typography,
+  useTheme,
+  styled,
+  Box,
+  Badge,
+  Tooltip,
+  ListItemButton,
+  ListItemAvatar,
+  CircularProgress,
+  Chip,
+  useMediaQuery,
+} from "@mui/material";
+import {
+  Home as HomeIcon,
+  Dashboard as DashboardIcon,
+  ListAlt as TasksIcon,
+  Settings as SettingsIcon,
+  Person as ProfileIcon,
+  Info as InfoIcon,
+  ChevronLeft,
+  ChevronRight,
+  Notifications as NotificationsIcon,
+  Lightbulb as LightbulbIcon,
+  BarChart as BarChartIcon,
+  Timeline as TimelineIcon,
+  Star as StarIcon,
+  WbSunny, // Added missing WbSunnyIcon import
+  Brightness4 // Added missing Brightness4Icon import
+} from "@mui/icons-material";
+
+const drawerWidth = 280;
+const appBarHeight = 64;
+
+const StyledDrawer = styled(Drawer)(({ theme }) => ({
+  width: drawerWidth,
+  flexShrink: 0,
+  '& .MuiDrawer-paper': {
+    width: drawerWidth,
+    height: `calc(100vh - ${appBarHeight}px)`,
+    marginTop: appBarHeight,
+    background: theme.palette.background.default,
+    borderRight: `1px solid ${theme.palette.divider}`,
+    boxShadow: theme.shadows[4],
+    transition: theme.transitions.create('width', {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.enteringScreen,
+    }),
+  },
+}));
+
+const SideNav = () => {
+  const theme = useTheme();
+  const location = useLocation();
+  const [collapsed, setCollapsed] = useState(false);
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  const navItems = [
+    {
+      text: "Dashboard",
+      icon: <BarChartIcon />,
+      link: "/dashboard",
+      badge: 3,
+      badgeColor: "secondary",
+      description: "View your analytics and statistics"
+    },
+    {
+      text: "Tasks",
+      icon: <TasksIcon />,
+      link: "/tasks",
+      badge: 8,
+      badgeColor: "primary",
+      description: "Manage your to-do list and priorities"
+    },
+    {
+      text: "Projects",
+      icon: <TimelineIcon />,
+      link: "/projects",
+      badge: 5,
+      badgeColor: "info",
+      description: "Track your ongoing projects"
+    },
+    {
+      text: "Insights",
+      icon: <LightbulbIcon />,
+      link: "/insights",
+      badge: null,
+      description: "Discover trends and patterns"
+    },
+    {
+      text: "Profile",
+      icon: <ProfileIcon />,
+      link: "/profile",
+      badge: null,
+      description: "Manage your account settings"
+    },
+    {
+      text: "Settings",
+      icon: <SettingsIcon />,
+      link: "/settings",
+      badge: 1,
+      badgeColor: "warning",
+      description: "Configure your preferences"
+    },
+    {
+      text: "About",
+      icon: <InfoIcon />,
+      link: "/about",
+      badge: null,
+      description: "Learn more about the application"
+    },
+  ];
+
+  const renderNavItem = (item) => {
+    return (
+      <ListItemButton
+        component={NavLink}
+        to={item.link}
+        selected={location.pathname === item.link}
+        sx={{
+          borderRadius: theme.shape.borderRadius,
+          mb: 0.5,
+          py: 1.2,
+          px: collapsed ? 1.5 : 2.5,
+          bgcolor: location.pathname === item.link ? theme.palette.action.selected : 'transparent',
+          transition: theme.transitions.create(['background', 'color'], {
+            duration: theme.transitions.duration.short,
+          }),
+          '&:hover': {
+            bgcolor: theme.palette.action.hover,
+            color: theme.palette.primary.contrastText,
+          },
+          '&.Mui-selected': {
+            bgcolor: theme.palette.primary.light,
+            color: theme.palette.primary.contrastText,
+            fontWeight: 'bold',
+            '&:hover': {
+              bgcolor: theme.palette.primary.main,
+            },
+          },
+        }}
+      >
+        <ListItemIcon sx={{ color: 'inherit', minWidth: collapsed ? 36 : 40 }}>
+          {item.badge ? (
+            <Badge
+              badgeContent={item.badge}
+              color={item.badgeColor}
+              overlap="circular"
+              sx={{ width: 24, height: 24 }}
+            >
+              {item.icon}
+            </Badge>
+          ) : (
+            item.icon
+          )}
+        </ListItemIcon>
+        {!collapsed && (
+          <>
+            <ListItemText
+              primary={
+                <Box display="flex" alignItems="center">
+                  <Typography variant="body1" fontWeight={500}>
+                    {item.text}
+                  </Typography>
+                  {item.badge && (
+                    <Chip
+                      size="small"
+                      label={item.badge}
+                      color={item.badgeColor}
+                      sx={{ ml: 1, fontSize: '0.7rem', fontWeight: 'bold' }}
+                    />
+                  )}
+                </Box>
+              }
+              secondary={
+                <Typography variant="caption" color="textSecondary">
+                  {item.description}
+                </Typography>
+              }
+            />
+          </>
+        )}
+      </ListItemButton>
+    );
+  };
+
+  return (
+    <StyledDrawer variant="permanent" open={!collapsed}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          padding: theme.spacing(2),
+        }}
+      >
+        {/* Header Section */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            mb: 3,
+            p: 1.5,
+            borderRadius: theme.shape.borderRadius,
+            bgcolor: theme.palette.mode === 'dark'
+              ? 'rgba(255,255,255,0.05)'
+              : 'rgba(0,0,0,0.05)',
+          }}
+        >
+          <Avatar
+            sx={{
+              width: 50,
+              height: 50,
+              bgcolor: theme.palette.primary.main,
+              mr: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Typography variant="h5" fontWeight={700}>
+              ST
+            </Typography>
+          </Avatar>
+          {!collapsed && (
+            <Box>
+              <Typography variant="h6" fontWeight={700} noWrap>
+                Smart Task Manager
+              </Typography>
+              <Typography variant="caption" color="textSecondary">
+                v2.4.1
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
+        <Divider sx={{ mb: 2 }} />
+
+        {/* Quick Actions */}
+        {!collapsed && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
+              Quick Actions
+            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 1,
+                overflowX: 'auto',
+                pb: 1,
+                '&::-webkit-scrollbar': {
+                  height: 4,
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  backgroundColor: theme.palette.divider,
+                  borderRadius: 2,
+                },
+              }}
+            >
+              <Tooltip title="Create New Task">
+                <ListItemAvatar>
+                  <Avatar
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: theme.palette.primary.light,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <StarIcon />
+                  </Avatar>
+                </ListItemAvatar>
+              </Tooltip>
+              <Tooltip title="Notifications">
+                <ListItemAvatar>
+                  <Avatar
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: theme.palette.info.light,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Badge badgeContent={5} color="secondary">
+                      <NotificationsIcon />
+                    </Badge>
+                  </Avatar>
+                </ListItemAvatar>
+              </Tooltip>
+              <Tooltip title="Statistics">
+                <ListItemAvatar>
+                  <Avatar
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      bgcolor: theme.palette.success.light,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <BarChartIcon />
+                  </Avatar>
+                </ListItemAvatar>
+              </Tooltip>
+            </Box>
+          </Box>
+        )}
+
+        {/* Navigation Items */}
+        <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+          <List>
+            {navItems.map((item) => (
+              <React.Fragment key={item.text}>
+                {renderNavItem(item)}
+                <Divider sx={{ my: 0.5 }} />
+              </React.Fragment>
+            ))}
+          </List>
+        </Box>
+
+        {/* Bottom Section */}
+        <Box sx={{ mt: 'auto' }}>
+          <Divider sx={{ mb: 2 }} />
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              py: 1.5,
+            }}
+          >
+            <ListItemButton onClick={() => setCollapsed(!collapsed)}>
+              <ListItemIcon>
+                {collapsed ? <ChevronRight /> : <ChevronLeft />}
+              </ListItemIcon>
+              <ListItemText primary="Collapse Menu" />
+            </ListItemButton>
+            <Tooltip title="Toggle Theme">
+              <ListItemAvatar
+                sx={{ cursor: 'pointer' }}
+                onClick={() => theme.palette.mode === 'dark' ? theme.palette.mode = 'light' : theme.palette.mode = 'dark'}
+              >
+                <Avatar
+                  sx={{
+                    width: 36,
+                    height: 36,
+                    bgcolor: theme.palette.mode === 'dark'
+                      ? theme.palette.background.default
+                      : theme.palette.grey[200],
+                  }}
+                >
+                  <BrightnessIcon />
+                </Avatar>
+              </ListItemAvatar>
+            </Tooltip>
+          </Box>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              mt: 2,
+              fontSize: '0.7rem',
+              color: 'text.disabled',
+            }}
+          >
+            <Typography variant="caption">
+              © {new Date().getFullYear()} Smart Task Manager. All rights reserved.
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+    </StyledDrawer>
+  );
+};
+
+// Helper component for theme toggle
+const BrightnessIcon = () => {
+  const theme = useTheme();
+  return theme.palette.mode === 'dark' ? (
+    <WbSunny /> // Using imported WbSunny
+  ) : (
+    <Brightness4 /> // Using imported Brightness4
+  );
+};
+
+export default SideNav;
