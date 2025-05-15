@@ -1,11 +1,13 @@
-// server/routes/userRoutes.js
-
 const { Router } = require('express');
 const { getClientInfo } = require('../middleware/clientInfo');
 const { 
   getAllUsers,
   registerUser,
   loginUser,
+  verifyEmail,
+  resendVerification,
+  forgotPassword,
+  resetPassword,
   getUserProfile,
   updateUserProfile,
   deleteUser
@@ -19,15 +21,19 @@ const router = Router();
 router.use(verifyEnvironment);
 
 // Public endpoints
-router.post('/register', registerUser);
-router.post('/login', getClientInfo, loginUser);
+router.post('/auth/register', registerUser);
+router.post('/auth/login', getClientInfo, loginUser);
+router.get('/auth/verify-email/:token', verifyEmail);
+router.post('/auth/resend-verification', resendVerification);
+router.post('/auth/forgot-password', forgotPassword);
+router.post('/auth/reset-password/:token', resetPassword);
 
 // Authentication barrier
 router.use(auth);
 
 // Protected endpoints
-router.get('/', getAllUsers);
-router.route('/profile')
+router.get('/users', getAllUsers);
+router.route('/auth/profile')
   .get(getUserProfile)
   .put(updateUserProfile)
   .delete(deleteUser);

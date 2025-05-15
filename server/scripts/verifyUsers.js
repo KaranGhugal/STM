@@ -21,20 +21,25 @@ const verifyUsers = async () => {
         await Role.create({
           name: user.name,
           email: user.email,
-          password: user.password, // Use the same password (already hashed)
-          confirmPassword: undefined, // Will be cleared by pre-save hook
-          role: RoleType.USER // Default role
+          password: user.password,
+          confirmPassword: undefined,
+          role: RoleType.USER
         });
         console.log(`✅ Created Role entry for ${user.email}`);
       }
+      // Ensure isEmailVerified is set
+      if (user.isEmailVerified === undefined) {
+        user.isEmailVerified = false;
+        await user.save();
+        console.log(`✅ Set isEmailVerified to false for ${user.email}`);
+      }
     }
 
-    // Check for roles without corresponding users (optional cleanup)
+    // Check for roles without corresponding users
     for (const role of roles) {
       const user = users.find(u => u.email === role.email);
       if (!user) {
         console.warn(`⚠️ Role ${role.email} has no corresponding User entry. Consider deleting...`);
-        // Optionally delete: await Role.deleteOne({ _id: role._id });
       }
     }
 

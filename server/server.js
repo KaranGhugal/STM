@@ -12,7 +12,7 @@ const roleRoutes = require("./routes/roleRoutes");
 const app = express();
 
 // Validate essential environment variables
-const requiredEnvVars = ["MONGO_URI"];
+const requiredEnvVars = ["MONGO_URI", "JWT_SECRET", "EMAIL_SERVICE", "EMAIL_USER", "EMAIL_PASS", "FRONTEND_URL"];
 requiredEnvVars.forEach((env) => {
   if (!process.env[env]) {
     console.error(`Missing ${env} in environment variables`);
@@ -27,7 +27,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // CORS Configuration
 const corsOptions = {
-  origin: "http://localhost:3000",
+  origin: process.env.FRONTEND_URL,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,

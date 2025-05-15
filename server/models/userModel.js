@@ -56,6 +56,10 @@ const userSchema = new Schema({
     type: String,
     default: ''
   },
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now,

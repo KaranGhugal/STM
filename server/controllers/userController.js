@@ -1,12 +1,21 @@
 const User = require("../models/userModel");
-const Role = require("../models/roleModel"); // Import Role model
+const Role = require("../models/roleModel");
 const LoginHistory = require("../models/loginHistoryModel");
+const EmailVerification = require("../models/emailVerificationModel");
+const PasswordReset = require("../models/passwordResetModel");
 const asyncHandler = require("express-async-handler");
 const generateToken = require("../utils/generateToken");
+const { sendEmail } = require("../utils/emailService");
+const { 
+  getVerificationEmailTemplate, 
+  getWelcomeEmailTemplate,
+  getPasswordResetEmailTemplate 
+} = require("../utils/emailTemplates");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const fs = require("fs");
+const crypto = require("crypto");
 const {
   PASSWORDS_DO_NOT_MATCH,
   USER_EXISTS,
@@ -20,6 +29,9 @@ const {
   DB_UNAVAILABLE,
   JWT_MISSING,
   FILE_UPLOAD_ERROR,
+  EMAIL_NOT_VERIFIED,
+  INVALID_TOKEN,
+  TOKEN_EXPIRED
 } = require("../utils/errorMessages");
 const { uploadProfilePhoto } = require("../utils/fileUpload");
 
@@ -28,6 +40,11 @@ const deleteUploadedFile = (req) => {
   if (req.file?.path && fs.existsSync(req.file.path)) {
     fs.unlinkSync(req.file.path);
   }
+};
+
+// Helper: Generate verification token
+const generateVerificationToken = () => {
+  return crypto.randomBytes(32).toString('hex');
 };
 
 // @desc    Get all users
@@ -42,6 +59,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
       email: user.email,
       phone: user.phone,
       photo: user.photo || "",
+      isEmailVerified: user.isEmailVerified
     }))
   );
 });
@@ -81,6 +99,7 @@ const registerUser = asyncHandler(async (req, res) => {
           password,
           confirmPassword,
           photo: req.file ? `/${req.file.path.replace(/\\/g, "/")}` : undefined,
+          isEmailVerified: false
         }],
         { session }
       );
@@ -98,8 +117,6 @@ const registerUser = asyncHandler(async (req, res) => {
         [{
           name,
           email,
-          password,
-          confirmPassword,
           role: Role.RoleType.USER
         }],
         { session }
@@ -109,25 +126,27 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new Error('Failed to create role');
       }
 
+      const verificationToken = generateVerificationToken();
+      await EmailVerification.create(
+        [{
+          userId: user[0]._id,
+          token: verificationToken,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+        }],
+        { session }
+      );
+
+      const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+      await sendEmail({
+        to: email,
+        subject: 'Verify Your Email Address',
+        html: getVerificationEmailTemplate({ name, verificationUrl })
+      });
+
       await session.commitTransaction();
 
-      const token = generateToken(res, user[0]._id, role[0].role);
       res.status(201).json({
-        token,
-        user: {
-          id: user[0]._id,
-          name: user[0].name,
-          email: user[0].email,
-          phone: user[0].phone,
-          photo: user[0].photo || "",
-        },
-        role: {
-          roleId: role[0]._id,
-          role: role[0].role,
-          name: role[0].name,
-          email: role[0].email,
-          createdAt: role[0].createdAt,
-        },
+        message: 'Registration successful. Please verify your email.'
       });
 
     } catch (error) {
@@ -138,6 +157,82 @@ const registerUser = asyncHandler(async (req, res) => {
       session.endSession();
     }
   });
+});
+
+// @desc    Verify email
+// @route   GET /api/auth/verify-email/:token
+// @access  Public
+const verifyEmail = asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const verificationRecord = await EmailVerification.findOne({ token });
+
+  if (!verificationRecord) {
+    throw new Error(INVALID_TOKEN);
+  }
+
+  if (verificationRecord.expiresAt < new Date()) {
+    await EmailVerification.deleteOne({ _id: verificationRecord._id });
+    throw new Error(TOKEN_EXPIRED);
+  }
+
+  const user = await User.findById(verificationRecord.userId);
+  if (!user) {
+    throw new Error(USER_NOT_FOUND_EMAIL);
+  }
+
+  user.isEmailVerified = true;
+  await user.save();
+
+  await sendEmail({
+    to: user.email,
+    subject: 'Welcome to Task Manager App!',
+    html: getWelcomeEmailTemplate({
+      name: user.name,
+      email: user.email,
+      phone: user.phone
+    })
+  });
+
+  await EmailVerification.deleteOne({ _id: verificationRecord._id });
+
+  res.status(200).json({ message: 'Email verified successfully' });
+});
+
+// @desc    Resend verification email
+// @route   POST /api/auth/resend-verification
+// @access  Public
+const resendVerification = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    throw new Error('Email is required');
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new Error(USER_NOT_FOUND_EMAIL);
+  }
+
+  if (user.isEmailVerified) {
+    throw new Error('Email is already verified');
+  }
+
+  await EmailVerification.deleteMany({ userId: user._id });
+
+  const verificationToken = generateVerificationToken();
+  await EmailVerification.create({
+    userId: user._id,
+    token: verificationToken,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+  });
+
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+  await sendEmail({
+    to: user.email,
+    subject: 'Verify Your Email Address',
+    html: getVerificationEmailTemplate({ name: user.name, verificationUrl })
+  });
+
+  res.status(200).json({ message: 'Verification email resent successfully' });
 });
 
 // @desc    Login user
@@ -153,39 +248,33 @@ const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({ email }).select("+password");
   if (!user) {
     console.error('Login failed - User not found:', email);
-    return res.status(404).json({ status: false, error: AUTH_FAILED, message: USER_NOT_FOUND_EMAIL });
+    return res.status(404).json({ status: false, error: USER_NOT_FOUND_EMAIL });
   }
 
-  console.log('User found during login:', user.email);
-  if (!(await bcrypt.compare(password, user.password))) {
-    console.error('Login failed - Incorrect password for:', email);
-    return res.status(401).json({ status: false, error: AUTH_FAILED, message: INCORRECT_PASSWORD });
+  if (!user.isEmailVerified) {
+    throw new Error(EMAIL_NOT_VERIFIED);
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    console.error('Login failed - Incorrect password:', email);
+    return res.status(401).json({ status: false, error: INCORRECT_PASSWORD });
   }
 
   const role = await Role.findOne({ email });
   if (!role) {
-    console.error('Login failed - Role not found for:', email);
-    return res.status(404).json({ status: false, error: "Role not found", message: "No role associated with this user" });
+    throw new Error('Role not found');
   }
 
-  console.log('Role found during login:', role.role);
   await LoginHistory.create({
     userId: user._id,
-    ipAddress: req.clientInfo?.ip || "Not detected",
-    userAgent: req.clientInfo?.userAgent || "Unknown",
+    email,
+    loginTime: new Date(),
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
   });
 
   const token = generateToken(res, user._id, role.role);
-
-  res.set({
-    "X-Auth-Token": token,
-    "X-User-Id": user._id.toString(),
-    "X-User-Name": user.name,
-    "X-User-Email": user.email,
-    "X-Role": role.role,
-    "X-Role-Id": role._id.toString(),
-  });
-
   res.status(200).json({
     token,
     user: {
@@ -194,6 +283,7 @@ const loginUser = asyncHandler(async (req, res) => {
       email: user.email,
       phone: user.phone,
       photo: user.photo || "",
+      isEmailVerified: user.isEmailVerified
     },
     role: {
       roleId: role._id,
@@ -201,8 +291,76 @@ const loginUser = asyncHandler(async (req, res) => {
       name: role.name,
       email: role.email,
       createdAt: role.createdAt,
-    },
+    }
   });
+});
+
+// @desc    Forgot password
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    throw new Error('Email is required');
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new Error(USER_NOT_FOUND_EMAIL);
+  }
+
+  await PasswordReset.deleteMany({ userId: user._id });
+
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  await PasswordReset.create({
+    userId: user._id,
+    token: resetToken,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000)
+  });
+
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+  await sendEmail({
+    to: user.email,
+    subject: 'Password Reset Request',
+    html: getPasswordResetEmailTemplate({ name: user.name, resetUrl })
+  });
+
+  res.status(200).json({ message: 'Password reset email sent successfully' });
+});
+
+// @desc    Reset password
+// @route   POST /api/auth/reset-password/:token
+// @access  Public
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token } = req.params;
+  const { password, confirmPassword } = req.body;
+
+  if (password !== confirmPassword) {
+    throw new Error(PASSWORDS_DO_NOT_MATCH);
+  }
+
+  const resetRecord = await PasswordReset.findOne({ token });
+  if (!resetRecord) {
+    throw new Error(INVALID_TOKEN);
+  }
+
+  if (resetRecord.expiresAt < new Date()) {
+    await PasswordReset.deleteOne({ _id: resetRecord._id });
+    throw new Error(TOKEN_EXPIRED);
+  }
+
+  const user = await User.findById(resetRecord.userId).select("+password");
+  if (!user) {
+    throw new Error(USER_NOT_FOUND_EMAIL);
+  }
+
+  user.password = password;
+  user.confirmPassword = confirmPassword;
+  await user.save();
+
+  await PasswordReset.deleteOne({ _id: resetRecord._id });
+
+  res.status(200).json({ message: 'Password reset successfully' });
 });
 
 // @desc    Get user profile
@@ -212,7 +370,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) {
     res.status(404);
-    throw new Error(USER_NOT_FOUND);
+    throw new Error(USER_NOT_FOUND_EMAIL);
   }
   res.status(200).json({
     _id: user._id,
@@ -220,6 +378,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
     email: user.email,
     phone: user.phone,
     photo: user.photo || "",
+    isEmailVerified: user.isEmailVerified
   });
 });
 
@@ -233,62 +392,70 @@ const updateUserProfile = asyncHandler(async (req, res) => {
 
     try {
       if (err) {
-        err instanceof multer.MulterError
-          ? res.status(400).json({ error: FILE_UPLOAD_ERROR })
-          : res.status(500).json({ error: err.message });
-        return;
+        throw new Error(
+          err instanceof multer.MulterError
+            ? FILE_UPLOAD_ERROR
+            : err.message
+        );
       }
 
-      const user = await User.findById(req.user._id).session(session);
-      if (!user) throw new Error(USER_NOT_FOUND);
+      const userId = req.user._id;
+      const { name, email, phone, currentPassword, password, confirmPassword } = req.body;
 
-      // Find the corresponding Role entry
-      const role = await Role.findOne({ email: user.email }).session(session);
-      if (!role) throw new Error('Role not found for this user');
+      const user = await User.findById(userId).select("+password").session(session);
+      if (!user) {
+        throw new Error(USER_NOT_FOUND_EMAIL);
+      }
 
-      // Update fields in User
-      if (req.body.email && req.body.email !== user.email) {
-        if (await User.findOne({ email: req.body.email })) {
+      if (email && email !== user.email) {
+        const emailExists = await User.findOne({ email }).session(session);
+        if (emailExists) {
           throw new Error(EMAIL_IN_USE);
         }
-        user.email = req.body.email;
-        role.email = req.body.email; // Sync email with Role
       }
-      if (req.body.name) {
-        user.name = req.body.name;
-        role.name = req.body.name; // Sync name with Role
-      }
-      if (req.body.phone) user.phone = req.body.phone;
 
-      // Password update logic
-      if (req.body.password) {
-        if (!req.body.currentPassword) throw new Error(PASSWORD_REQUIRED);
-        if (!(await bcrypt.compare(req.body.currentPassword, user.password))) {
+      if (currentPassword && password && confirmPassword) {
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
           throw new Error(INCORRECT_PASSWORD);
         }
-        user.password = req.body.password;
-        role.password = req.body.password; // Sync password with Role
-        role.confirmPassword = req.body.password; // Sync confirmPassword
+        if (password !== confirmPassword) {
+          throw new Error(PASSWORDS_DO_NOT_MATCH);
+        }
+        user.password = password;
+        user.confirmPassword = confirmPassword;
       }
 
-      // Update profile photo
+      user.name = name || user.name;
+      user.email = email || user.email;
+      user.phone = phone || user.phone;
       if (req.file) {
-        if (user.photo) fs.unlinkSync(user.photo.substring(1));
+        if (user.photo && fs.existsSync(user.photo.substring(1))) {
+          fs.unlinkSync(user.photo.substring(1));
+        }
         user.photo = `/${req.file.path.replace(/\\/g, "/")}`;
       }
 
       await user.save({ session });
-      await role.save({ session });
+
+      const role = await Role.findOne({ email: user.email }).session(session);
+      if (role) {
+        role.name = user.name;
+        role.email = user.email;
+        await role.save({ session });
+      }
 
       await session.commitTransaction();
 
       res.status(200).json({
-        _id: user._id,
+        id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,
         photo: user.photo || "",
+        isEmailVerified: user.isEmailVerified
       });
+
     } catch (error) {
       await session.abortTransaction();
       deleteUploadedFile(req);
@@ -308,28 +475,26 @@ const deleteUser = asyncHandler(async (req, res) => {
 
   try {
     const user = await User.findById(req.user._id).session(session);
-    if (!user) throw new Error(USER_NOT_FOUND);
+    if (!user) throw new Error(USER_NOT_FOUND_EMAIL);
 
     if (!req.body.password) throw new Error(PASSWORD_REQUIRED);
     if (!(await bcrypt.compare(req.body.password, user.password))) {
       throw new Error(INCORRECT_PASSWORD);
     }
 
-    // Find the corresponding Role entry
     const role = await Role.findOne({ email: user.email }).session(session);
     if (!role) throw new Error('Role not found for this user');
 
-    // Delete the user's profile photo if it exists
     if (user.photo) fs.unlinkSync(user.photo.substring(1));
 
-    // Delete related data
     await LoginHistory.deleteMany({ userId: user._id }).session(session);
+    await EmailVerification.deleteMany({ userId: user._id }).session(session);
+    await PasswordReset.deleteMany({ userId: user._id }).session(session);
     await User.deleteOne({ _id: user._id }).session(session);
     await Role.deleteOne({ _id: role._id }).session(session);
 
     await session.commitTransaction();
 
-    // Clear the JWT cookie
     res.clearCookie("jwt");
     res.status(200).json({ message: ACCOUNT_DELETED });
   } catch (error) {
@@ -343,8 +508,12 @@ const deleteUser = asyncHandler(async (req, res) => {
 module.exports = {
   getAllUsers,
   registerUser,
+  verifyEmail,
+  resendVerification,
   loginUser,
+  forgotPassword,
+  resetPassword,
   getUserProfile,
   updateUserProfile,
-  deleteUser,
+  deleteUser
 };
